@@ -29,7 +29,6 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     settings = get_settings()
     logger.info("Starting %s v%s", settings.APP_NAME, settings.APP_VERSION)
-    logger.info("Ollama: %s  Model: %s", settings.OLLAMA_BASE_URL, settings.OLLAMA_MODEL)
     logger.info("Cache: %s  DB: %s", "enabled" if settings.CACHE_ENABLED else "disabled", settings.CACHE_DB_PATH)
 
     init_service(settings)
@@ -50,7 +49,7 @@ app = FastAPI(
     version=settings.APP_VERSION,
     description=(
         "Microservicio de generación de variaciones de texto para mensajes de Instagram. "
-        "Usa Mistral 7B (via Ollama) para reescribir un mensaje base en múltiples "
+        "Usa IA (Groq, Gemini, OpenAI) para reescribir un mensaje base en múltiples "
         "variaciones naturales que no parezcan enviadas por un bot."
     ),
     lifespan=lifespan,

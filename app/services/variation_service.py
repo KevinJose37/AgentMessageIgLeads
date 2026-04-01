@@ -9,7 +9,9 @@ from ..models.enums import GenerationStatus
 from ..models.schemas import VariationRequest, VariationResponse
 from .cache_service import CacheService
 from .prompt_builder import PromptBuilder
-from .providers.ollama_provider import OllamaProvider
+from .providers.base import AIProvider
+from .providers.groq_provider import OpenAICompatibleProvider
+from .providers.gemini_provider import GeminiProvider
 
 logger = logging.getLogger(__name__)
 
@@ -17,17 +19,23 @@ logger = logging.getLogger(__name__)
 class VariationService:
     """
     Core orchestrator: receives a variation request, checks cache,
-    generates missing variations via Ollama, stores results, and returns.
+    generates missing variations via AI providers (with fallback),
+    stores results, and returns.
     """
 
     def __init__(self, settings: Settings):
         self.settings = settings
+        self._last_error: str = ""
+        self._active_provider_name: str = ""
 
-        self.provider = OllamaProvider(
-            base_url=settings.OLLAMA_BASE_URL,
-            model=settings.OLLAMA_MODEL,
-            timeout=settings.OLLAMA_TIMEOUT,
-        )
+        # Build provider chain (primary → fallbacks)
+        self.providers: list[AIProvider] = self._build_provider_chain(settings)
+
+        if not self.providers:
+            logger.error(
+                "No AI providers configured! Set at least one API key in .env "
+                "(GROQ_API_KEY, GEMINI_API_KEY, or OPENAI_API_KEY)"
+            )
 
         self.cache: Optional[CacheService] = None
         if settings.CACHE_ENABLED:
@@ -39,6 +47,65 @@ class VariationService:
         self.prompt_builder = PromptBuilder()
 
     # ------------------------------------------------------------------
+    # Provider chain
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _build_provider_chain(settings: Settings) -> list[AIProvider]:
+        """
+        Build ordered list of providers. First available wins.
+        Add an API key in .env to activate any provider.
+
+        Chain order: Groq → Gemini → OpenAI
+        """
+        providers: list[AIProvider] = []
+
+        # 1. Groq (primary — free, ultra fast)
+        if settings.GROQ_API_KEY:
+            providers.append(
+                OpenAICompatibleProvider(
+                    api_key=settings.GROQ_API_KEY,
+                    model=settings.GROQ_MODEL,
+                    base_url="https://api.groq.com/openai/v1",
+                    provider_name="groq",
+                    timeout=settings.GROQ_TIMEOUT,
+                )
+            )
+            logger.info("Provider registered: groq/%s", settings.GROQ_MODEL)
+
+        # 2. Google Gemini (fallback — free tier generous)
+        if settings.GEMINI_API_KEY:
+            providers.append(
+                GeminiProvider(
+                    api_key=settings.GEMINI_API_KEY,
+                    model=settings.GEMINI_MODEL,
+                    timeout=settings.GEMINI_TIMEOUT,
+                )
+            )
+            logger.info("Provider registered: gemini/%s", settings.GEMINI_MODEL)
+
+        # 3. OpenAI (fallback — paid but excellent quality)
+        if settings.OPENAI_API_KEY:
+            providers.append(
+                OpenAICompatibleProvider(
+                    api_key=settings.OPENAI_API_KEY,
+                    model=settings.OPENAI_MODEL,
+                    base_url="https://api.openai.com/v1",
+                    provider_name="openai",
+                    timeout=settings.OPENAI_TIMEOUT,
+                )
+            )
+            logger.info("Provider registered: openai/%s", settings.OPENAI_MODEL)
+
+        if providers:
+            logger.info(
+                "Provider chain: %s",
+                " → ".join(p.name for p in providers),
+            )
+
+        return providers
+
+    # ------------------------------------------------------------------
     # Main entry point
     # ------------------------------------------------------------------
 
@@ -47,6 +114,7 @@ class VariationService:
     ) -> VariationResponse:
         """Generate N variations for the given message."""
         start = time.time()
+        self._last_error = ""
         from_cache = 0
         from_generation = 0
         all_variations: list[str] = []
@@ -100,58 +168,116 @@ class VariationService:
             total=len(all_variations),
             from_cache=from_cache,
             from_generation=from_generation,
-            provider=self.provider.name,
+            provider=self._active_provider_name,
             generation_time_seconds=round(elapsed, 2),
-            message=self._status_message(status, from_cache, from_generation),
+            message=self._status_message(
+                status, from_cache, from_generation, self._last_error
+            ),
         )
 
     # ------------------------------------------------------------------
-    # Batch generation
+    # Batch generation with provider fallback
     # ------------------------------------------------------------------
 
     async def _generate_in_batches(
         self, request: VariationRequest, count: int
     ) -> list[str]:
         """
-        Split large requests into smaller batches to keep individual
-        inference calls manageable on CPU.
+        Generate variations using the provider chain.
+        If primary provider fails, falls back to the next one.
         """
+        if not self.providers:
+            self._last_error = "No hay providers de IA configurados. Configura GROQ_API_KEY en .env"
+            return []
+
         all_generated: list[str] = []
         batch_size = self.settings.BATCH_SIZE
+        empty_retries = 0
+        max_empty_retries = 2
 
-        while len(all_generated) < count:
-            current_batch = min(batch_size, count - len(all_generated))
-
-            system_prompt, user_prompt = self.prompt_builder.build_variation_prompt(
-                message=request.message,
-                num_variations=current_batch,
-                tone=request.tone.value,
-                rules=request.rules,
-            )
-
+        # Try each provider in order
+        for provider in self.providers:
             try:
-                raw_response = await self.provider.generate(
-                    system_prompt=system_prompt,
-                    user_prompt=user_prompt,
-                    temperature=self.settings.TEMPERATURE,
-                )
+                # Quick health check
+                is_healthy = await provider.is_healthy()
+                if not is_healthy:
+                    logger.warning("Provider %s is not healthy, trying next", provider.name)
+                    continue
 
-                variations = self._parse_variations(raw_response)
-                all_generated.extend(variations)
+                self._active_provider_name = provider.name
+                logger.info("Using provider: %s", provider.name)
 
-                logger.info(
-                    "Batch complete: requested=%d, parsed=%d, total=%d",
-                    current_batch,
-                    len(variations),
-                    len(all_generated),
-                )
+                # Generate in batches with this provider
+                while len(all_generated) < count:
+                    current_batch = min(batch_size, count - len(all_generated))
+
+                    system_prompt, user_prompt = (
+                        self.prompt_builder.build_variation_prompt(
+                            message=request.message,
+                            num_variations=current_batch,
+                            tone=request.tone.value,
+                            rules=request.rules,
+                            context=request.context,
+                        )
+                    )
+
+                    raw_response = await provider.generate(
+                        system_prompt=system_prompt,
+                        user_prompt=user_prompt,
+                        temperature=self.settings.TEMPERATURE,
+                    )
+
+                    logger.info(
+                        "Raw response (first 300 chars): %s", raw_response[:300]
+                    )
+
+                    variations = self._parse_variations(raw_response)
+
+                    if not variations:
+                        empty_retries += 1
+                        logger.warning(
+                            "Parse returned 0 variations (attempt %d/%d). Raw: %s",
+                            empty_retries,
+                            max_empty_retries,
+                            raw_response[:300],
+                        )
+                        if empty_retries >= max_empty_retries:
+                            self._last_error = (
+                                f"El modelo respondió pero no se pudo parsear. "
+                                f"Respuesta: {raw_response[:200]}"
+                            )
+                            break
+                        continue
+
+                    all_generated.extend(variations)
+                    empty_retries = 0
+
+                    logger.info(
+                        "Batch complete: requested=%d, parsed=%d, total=%d/%d",
+                        current_batch,
+                        len(variations),
+                        len(all_generated),
+                        count,
+                    )
+
+                # If we got results from this provider, stop trying others
+                if all_generated:
+                    break
 
             except (TimeoutError, ConnectionError) as e:
-                logger.error("Provider error during batch: %s", e)
-                break
+                logger.warning(
+                    "Provider %s failed: %s — trying next provider",
+                    provider.name,
+                    e,
+                )
+                self._last_error = f"{provider.name}: {e}"
+                continue
             except Exception as e:
-                logger.exception("Unexpected error during generation: %s", e)
-                break
+                logger.exception(
+                    "Unexpected error with %s: %s", provider.name, e
+                )
+                self._last_error = f"{provider.name}: {type(e).__name__}: {e}"
+                continue
 
         return all_generated
 
@@ -179,7 +305,10 @@ class VariationService:
             if isinstance(parsed, list):
                 return [str(v).strip() for v in parsed if v and str(v).strip()]
             if isinstance(parsed, dict):
-                for key in ("variations", "messages", "results", "versiones", "data"):
+                for key in (
+                    "variations", "messages", "results",
+                    "versiones", "data", "versions",
+                ):
                     if key in parsed and isinstance(parsed[key], list):
                         return [
                             str(v).strip()
@@ -221,13 +350,21 @@ class VariationService:
     # ------------------------------------------------------------------
 
     async def health_check(self) -> dict:
-        ollama_ok = await self.provider.is_healthy()
-        model_ok = await self.provider.is_model_loaded() if ollama_ok else False
+        provider_statuses = []
+
+        for provider in self.providers:
+            healthy = await provider.is_healthy()
+            model_ready = await provider.is_model_loaded() if healthy else False
+            provider_statuses.append({
+                "name": provider.name,
+                "connected": healthy,
+                "model_ready": model_ready,
+            })
+
         cache_count = self.cache.get_cache_count() if self.cache else 0
 
         return {
-            "ollama_connected": ollama_ok,
-            "model_loaded": model_ok,
+            "providers": provider_statuses,
             "cache_entries": cache_count,
         }
 
@@ -236,7 +373,8 @@ class VariationService:
     # ------------------------------------------------------------------
 
     async def close(self):
-        await self.provider.close()
+        for provider in self.providers:
+            await provider.close()
 
     # ------------------------------------------------------------------
     # Helpers
@@ -244,7 +382,10 @@ class VariationService:
 
     @staticmethod
     def _status_message(
-        status: GenerationStatus, from_cache: int, from_gen: int
+        status: GenerationStatus,
+        from_cache: int,
+        from_gen: int,
+        error: str = "",
     ) -> str:
         if status == GenerationStatus.CACHED:
             return (
@@ -257,7 +398,10 @@ class VariationService:
                 f"{from_gen} generadas por IA"
             )
         if status == GenerationStatus.ERROR:
-            return "No se pudieron generar variaciones. Verifica que Ollama esté corriendo."
+            base = "No se pudieron generar variaciones."
+            if error:
+                return f"{base} Detalle: {error}"
+            return f"{base} Verifica la configuración del provider."
         return (
             f"Generación exitosa: {from_cache} del cache + "
             f"{from_gen} generadas por IA"

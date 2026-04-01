@@ -53,7 +53,7 @@ async def shutdown_service():
     },
     summary="Generar variaciones de mensaje",
     description=(
-        "Genera N variaciones únicas de un mensaje base usando Mistral 7B. "
+        "Genera N variaciones únicas de un mensaje base usando IA (Groq/Ollama). "
         "Soporta placeholders dinámicos como {nombre}, {detalle}, etc."
     ),
 )
@@ -77,7 +77,7 @@ async def generate_variations(
     except ConnectionError as e:
         raise HTTPException(
             status_code=502,
-            detail=f"No se puede conectar a Ollama: {e}",
+            detail=f"No se puede conectar al provider: {e}",
         )
     except Exception as e:
         raise HTTPException(
@@ -90,7 +90,7 @@ async def generate_variations(
     "/health",
     response_model=HealthResponse,
     summary="Health check",
-    description="Verifica el estado del servicio, conexión con Ollama y modelo cargado.",
+    description="Verifica el estado del servicio y providers de IA.",
 )
 async def health_check(
     service: VariationService = Depends(get_service),
@@ -98,12 +98,11 @@ async def health_check(
     settings = get_settings()
     health = await service.health_check()
 
-    all_ok = health["ollama_connected"] and health["model_loaded"]
+    any_ready = any(p["connected"] and p["model_ready"] for p in health["providers"])
 
     return HealthResponse(
-        status="healthy" if all_ok else "degraded",
-        ollama_connected=health["ollama_connected"],
-        model_loaded=health["model_loaded"],
+        status="healthy" if any_ready else "degraded",
+        providers=health["providers"],
         cache_entries=health["cache_entries"],
         version=settings.APP_VERSION,
     )
@@ -111,8 +110,8 @@ async def health_check(
 
 @router.get(
     "/providers",
-    summary="Info del provider activo",
-    description="Retorna información sobre el provider de IA configurado.",
+    summary="Info de providers configurados",
+    description="Retorna la cadena de providers de IA con su estado.",
 )
 async def provider_info(
     _: str = Depends(verify_api_key),
@@ -122,10 +121,8 @@ async def provider_info(
     health = await service.health_check()
 
     return {
-        "active_provider": f"ollama/{settings.OLLAMA_MODEL}",
-        "ollama_base_url": settings.OLLAMA_BASE_URL,
-        "model": settings.OLLAMA_MODEL,
-        "status": "ready" if health["model_loaded"] else "not_loaded",
+        "provider_chain": health["providers"],
+        "primary": health["providers"][0]["name"] if health["providers"] else "none",
         "batch_size": settings.BATCH_SIZE,
         "max_variations": settings.MAX_VARIATIONS_PER_REQUEST,
         "cache_enabled": settings.CACHE_ENABLED,

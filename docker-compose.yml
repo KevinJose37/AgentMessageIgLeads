@@ -1,25 +1,6 @@
 version: "3.8"
 
 services:
-  # -----------------------------------------------
-  # Ollama — Local LLM inference server (CPU only)
-  # -----------------------------------------------
-  ollama:
-    image: ollama/ollama:latest
-    container_name: ollama
-    ports:
-      - "11434:11434"
-    volumes:
-      - ollama_data:/root/.ollama
-    restart: unless-stopped
-    deploy:
-      resources:
-        limits:
-          memory: 6G
-
-  # -----------------------------------------------
-  # FastAPI — Variation generation service
-  # -----------------------------------------------
   api:
     build: .
     container_name: ig-variations-api
@@ -27,19 +8,6 @@ services:
       - "8000:8000"
     env_file:
       - .env
-    environment:
-      # Override to use Docker's internal DNS
-      - OLLAMA_BASE_URL=http://ollama:11434
-    depends_on:
-      - ollama
     volumes:
-      - ./data:/app/data   # Persist SQLite cache
+      - ./data:/app/data
     restart: unless-stopped
-    deploy:
-      resources:
-        limits:
-          memory: 1G
-
-volumes:
-  ollama_data:
-    driver: local

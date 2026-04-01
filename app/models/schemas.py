@@ -1,4 +1,5 @@
 from pydantic import BaseModel, Field
+from typing import Optional
 from .enums import Tone, GenerationStatus
 
 
@@ -18,8 +19,13 @@ class VariationRequest(BaseModel):
         description="Número de variaciones a generar (dinámico, 1-100)",
     )
     tone: Tone = Field(
-        default=Tone.CASUAL,
+        default=Tone.PROFESSIONAL,
         description="Tono del mensaje",
+    )
+    context: Optional[str] = Field(
+        default=None,
+        max_length=1000,
+        description="Contexto del negocio para variaciones más relevantes (ej: 'Agencia de marketing digital especializada en e-commerce')",
     )
     rules: list[str] = Field(
         default=[],
@@ -32,7 +38,8 @@ class VariationRequest(BaseModel):
                 {
                     "message": "Hola {nombre}, vi tu perfil y me llamó la atención {detalle}. Estoy trabajando en {oferta} y creo que podría interesarte.",
                     "num_variations": 10,
-                    "tone": "casual",
+                    "tone": "profesional",
+                    "context": "Agencia de marketing digital especializada en ayudar a negocios a conseguir más clientes mediante Instagram y publicidad online.",
                     "rules": ["Usar tuteo", "No mencionar precios"],
                 }
             ]
@@ -48,7 +55,7 @@ class VariationResponse(BaseModel):
     total: int
     from_cache: int = 0
     from_generation: int = 0
-    provider: str = "ollama/mistral"
+    provider: str = ""
     generation_time_seconds: float
     message: str = ""
 
@@ -57,8 +64,7 @@ class HealthResponse(BaseModel):
     """Health check response."""
 
     status: str
-    ollama_connected: bool
-    model_loaded: bool
+    providers: list[dict]
     cache_entries: int
     version: str
 
