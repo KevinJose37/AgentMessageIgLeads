@@ -3,30 +3,38 @@ import re
 
 class PromptBuilder:
     """
-    Builds optimized prompts for message rewriting.
-    Focused on sales outreach and lead generation for Instagram DMs.
+    Builds optimized prompts for Instagram DM outreach rewriting.
+    Focused on generating SHORT, VARIED, HUMAN messages that avoid
+    detection patterns and don't sound like a bot or agency.
     """
 
     SYSTEM_PROMPT = (
-        "Eres un especialista en ventas, generación de leads y comunicación "
-        "persuasiva a través de mensajes directos en Instagram. "
-        "Tienes amplia experiencia en outreach B2B y B2C, y tu fortaleza es "
-        "crear mensajes que capten la atención de potenciales clientes de forma "
-        "natural, profesional y no invasiva.\n\n"
-        "Tu estilo de comunicación es formal-neutro: profesional pero cercano, "
-        "sin ser frío ni excesivamente informal. Escribes como un profesional "
-        "real que se comunica con prospectos — nunca como un bot o un mensaje masivo.\n\n"
-        "REGLA FUNDAMENTAL: Respondes ÚNICAMENTE con un JSON array de strings. "
-        "Sin explicaciones, sin markdown, sin texto adicional antes o después del JSON."
+        "Eres una persona real que contacta prospectos por Instagram DM. "
+        "NO eres un copywriter, NO eres una agencia, NO escribes emails.\n\n"
+        "Escribes como una persona normal que manda mensajes cortos por Instagram: "
+        "directo, informal pero profesional, a veces imperfecto, siempre humano.\n\n"
+        "REGLA ABSOLUTA: Respondes ÚNICAMENTE con un JSON array de strings. "
+        "Sin explicaciones, sin markdown, sin texto adicional."
     )
 
     TONE_DESCRIPTIONS = {
-        "casual": "Relajado pero profesional, como un colega que recomienda algo",
-        "profesional": "Formal-neutro, transmite seriedad y credibilidad",
-        "amigable": "Cálido y cercano, genera confianza desde el primer mensaje",
-        "directo": "Conciso y al grano, respeta el tiempo del prospecto",
-        "entusiasta": "Positivo y con energía, muestra pasión por lo que ofrece",
+        "casual": "Relajado, como hablarle a un conocido por DM",
+        "profesional": "Profesional pero cercano, sin sonar a email corporativo",
+        "amigable": "Cálido, genera confianza desde el primer mensaje",
+        "directo": "Al grano, sin rodeos, respeta el tiempo",
+        "entusiasta": "Positivo con energía, pero sin exagerar",
     }
+
+    # Message archetypes to force diversity
+    MESSAGE_ARCHETYPES = """
+TIPOS DE MENSAJE (mezcla estos estilos entre las variaciones):
+1. CURIOSIDAD — genera intriga sin vender ("Vi algo en tu perfil que me llamó la atención...")
+2. PREGUNTA DIRECTA — abre conversación ("¿Tú manejas el marketing de tu negocio o alguien más lo hace?")
+3. OBSERVACIÓN — comenta algo específico ("Tu contenido tiene buen engagement, ¿has probado escalar con ads?")
+4. CONVERSACIONAL — casual, como amigo ("Hey, una pregunta rápida...")
+5. SOFT PITCH — menciona valor sin vender ("Estoy ayudando a negocios como el tuyo con algo, si te interesa te cuento")
+6. INCOMPLETO/ABIERTO — deja con curiosidad, pero indicando el contexto ("Vi tu perfil y se me ocurrió algo relacionado al {contexto}, ¿tienes un minuto?")\
+"""
 
     @staticmethod
     def build_variation_prompt(
@@ -39,13 +47,6 @@ class PromptBuilder:
         """
         Build system + user prompts for variation generation.
 
-        Args:
-            message: Base message template with optional placeholders.
-            num_variations: Number of unique variations to generate.
-            tone: Desired communication tone.
-            rules: Optional additional rules from the user.
-            context: Optional business context for better variations.
-
         Returns:
             Tuple of (system_prompt, user_prompt)
         """
@@ -55,17 +56,16 @@ class PromptBuilder:
         if placeholders:
             placeholder_list = ", ".join([f"{{{p}}}" for p in placeholders])
             placeholder_rule = (
-                f"- CRÍTICO: Conserva EXACTAMENTE estos placeholders sin "
-                f"modificar ni traducir: {placeholder_list}\n"
+                f"- CRITICO: Conserva estos placeholders EXACTOS sin modificar: "
+                f"{placeholder_list}\n"
             )
 
         # Business context
         context_section = ""
         if context:
             context_section = (
-                f"\nCONTEXTO DEL NEGOCIO:\n{context}\n"
-                f"Usa este contexto para que las variaciones sean coherentes "
-                f"con el negocio y su propuesta de valor.\n"
+                f"\nCONTEXTO DEL NEGOCIO (usa esto para dar coherencia, "
+                f"pero NO lo menciones textualmente):\n{context}\n"
             )
 
         # Additional user rules
@@ -77,27 +77,33 @@ class PromptBuilder:
 
         tone_desc = PromptBuilder.TONE_DESCRIPTIONS.get(tone, tone)
 
-        user_prompt = f"""Reescribe el siguiente mensaje de outreach generando exactamente {num_variations} versiones ÚNICAS.
+        user_prompt = f"""Reescribe el siguiente mensaje de Instagram DM en {num_variations} versiones COMPLETAMENTE diferentes.
 
-OBJETIVO: Cada versión debe parecer escrita por una persona real que contacta a un prospecto por Instagram. El mensaje debe captar la atención, generar interés y abrir la puerta a una conversación.
+CONTEXTO: Esto es un DM de Instagram, NO un email. Los mensajes deben ser CORTOS y directos.
 {context_section}
+{PromptBuilder.MESSAGE_ARCHETYPES}
+
 REGLAS DE REESCRITURA:
-- No cambies la intención ni el significado del mensaje original
-- Mantén longitud similar (±20% de caracteres)
-- Cada versión DEBE tener estructura y palabras notablemente diferentes
-- Usa lenguaje natural — como lo escribiría un profesional real, no un bot
-- NO repitas las mismas frases o patrones entre versiones
-- NO uses emojis excesivos (máximo 1 por mensaje, y solo en algunas versiones)
-- Varía los saludos iniciales (Hola, Hey, Qué tal, Buenos días, etc.)
-- Varía las formas de cerrar o invitar a la conversación
-- Evita frases genéricas de spam como "increíble oportunidad" o "no te lo pierdas"
+- Longitud: entre 8 y 25 palabras por mensaje (MÁXIMO 2 líneas)
+- NO todas las versiones deben ser ventas directas
+- Algunas deben ser SOLO preguntas
+- Algunas deben ser curiosas o abiertas (dejar con intriga)
+- Algunas pueden OMITIR saludo e ir directo al punto
+- Algunas pueden empezar con una pregunta o idea
+- Varía COMPLETAMENTE la estructura entre versiones
+- PROHIBIDO repetir el patrón: saludo + observación + pitch + CTA
+- Usa lenguaje natural, incluso ligeramente imperfecto (como humano real escribiendo rápido)
+- EVITA tono corporativo, de agencia o de email marketing
+- EVITA frases genéricas como "increíble oportunidad", "no te lo pierdas", "me encantaría conectar"
+- Máximo 1 emoji en ALGUNAS versiones (no en todas)
+- Algunos mensajes pueden ser incompletos o terminar con "..."
 {placeholder_rule}- TONO: {tone_desc}
 {rules_text}
 
-MENSAJE BASE:
+MENSAJE BASE (extrae la intención, NO copies la estructura):
 "{message}"
 
-RESPUESTA: JSON array de {num_variations} strings. SOLO el array, nada más.
-Ejemplo: ["versión 1", "versión 2"]"""
+RESPUESTA: JSON array de {num_variations} strings cortos. SOLO el array.
+["msg1", "msg2", ...]"""
 
         return PromptBuilder.SYSTEM_PROMPT, user_prompt
