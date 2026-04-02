@@ -107,3 +107,118 @@ RESPUESTA: JSON array de {num_variations} strings cortos. SOLO el array.
 ["msg1", "msg2", ...]"""
 
         return PromptBuilder.SYSTEM_PROMPT, user_prompt
+
+
+class CommentPromptBuilder:
+    """
+    Builds prompts for generating natural Instagram post comments.
+    The goal is engagement and conversation, NOT selling.
+    """
+
+    SYSTEM_PROMPT = (
+        "Eres una persona real interactuando en Instagram, comentando "
+        "publicaciones de otros usuarios.\n\n"
+        "NO eres un bot, NO eres una marca, NO eres una empresa. "
+        "Eres un usuario normal dejando comentarios naturales en posts.\n\n"
+        "Tu objetivo es escribir comentarios que:\n"
+        "- Se sientan humanos, espontaneos y reales\n"
+        "- Aporten algo al post (opinion, reaccion, pregunta o reflexion)\n"
+        "- Generen interaccion sin parecer forzado\n\n"
+        "REGLA ABSOLUTA: Respondes UNICAMENTE con un JSON array de strings. "
+        "Sin explicaciones, sin markdown, sin texto adicional."
+    )
+
+    TONE_DESCRIPTIONS = {
+        "casual": "Relajado, como un amigo comentando",
+        "profesional": "Respetuoso y con criterio, sin sonar a marca",
+        "amigable": "Calido y genuino, genera conexion",
+        "directo": "Breve y al punto, comentario rapido",
+        "entusiasta": "Positivo y con energia real (no fake)",
+    }
+
+    COMMENT_ARCHETYPES = """
+TIPOS DE COMENTARIO (mezcla estos estilos):
+1. REACCION GENUINA — respuesta emocional real al contenido ("Esto me paso igual la semana pasada, es tal cual")
+2. PREGUNTA CURIOSA — pregunta algo especifico del post ("Como llegaste a esa conclusion? Me interesa el proceso")
+3. OPINION/INSIGHT — agrega valor con un punto de vista ("Yo agregaria que tambien funciona si...")
+4. ANECDOTA CORTA — comparte algo personal relacionado ("Me recuerda a cuando yo empece con esto...")
+5. REFLEXION — comenta algo que te hizo pensar ("Esto cambia la perspectiva de como se ve normalmente")
+6. FELICITACION NATURAL — si es un logro, felicita sin ser generico ("El esfuerzo se nota, sobre todo en [detalle especifico]")
+"""
+
+    @staticmethod
+    def build_comment_prompt(
+        post_content: str,
+        num_comments: int,
+        tone: str,
+        rules: list[str] | None = None,
+        context: str | None = None,
+    ) -> tuple[str, str]:
+        """
+        Build system + user prompts for comment generation.
+
+        Args:
+            post_content: The text content of the Instagram post.
+            num_comments: Number of comments to generate.
+            tone: Desired tone.
+            rules: Optional additional rules.
+            context: Optional business context for subtle positioning.
+
+        Returns:
+            Tuple of (system_prompt, user_prompt)
+        """
+        # Business context (subtle, not promotional)
+        context_section = ""
+        if context:
+            context_section = (
+                f"\nTU CONTEXTO (esto define tu perspectiva al comentar, "
+                f"pero NUNCA lo menciones ni vendas):\n{context}\n"
+                f"Usa este contexto solo para que tu comentario suene "
+                f"informado, no para promocionar nada.\n"
+            )
+
+        # Additional rules
+        rules_text = ""
+        if rules:
+            rules_text = "\nREGLAS DEL USUARIO:\n" + "\n".join(
+                [f"- {r}" for r in rules]
+            )
+
+        tone_desc = CommentPromptBuilder.TONE_DESCRIPTIONS.get(tone, tone)
+
+        user_prompt = f"""Lee el siguiente post de Instagram y genera {num_comments} comentarios UNICOS y diferentes.
+{context_section}
+{CommentPromptBuilder.COMMENT_ARCHETYPES}
+
+ADAPTACION AL CONTEXTO DEL POST:
+- Si el post es emocional -> responde con empatia real
+- Si es informativo -> comenta una opinion o insight
+- Si es un logro -> felicita de forma natural y especifica
+- Si es pregunta -> responde o aporta tu experiencia
+- Si es polemico -> opina con respeto
+- Si es humor -> sigue el tono o reacciona naturalmente
+
+REGLAS CRITICAS:
+- Longitud: 5 a 20 palabras por comentario (como comentarios reales de Instagram)
+- Cada comentario debe ser COMPLETAMENTE diferente en estructura y enfoque
+- NO escribir como marketing o ventas
+- NO promocionar servicios directamente
+- NO sonar corporativo ni tecnico
+- NO usar frases genericas: "gran post", "excelente contenido", "muy interesante", "buen post"
+- NO repetir estructuras entre comentarios
+- NO exagerar entusiasmo artificial
+- Puede usar 0 o 1 emoji (no siempre, no en todos)
+- Algunos pueden ser preguntas
+- Algunos pueden ser opiniones
+- Algunos pueden ser reacciones cortas y genuinas
+- TONO: {tone_desc}
+{rules_text}
+
+POST DE INSTAGRAM:
+\"\"\"{post_content}\"\"\"
+
+RESPUESTA: JSON array de {num_comments} strings cortos. SOLO el array.
+["comentario1", "comentario2", ...]"""
+
+        return CommentPromptBuilder.SYSTEM_PROMPT, user_prompt
+

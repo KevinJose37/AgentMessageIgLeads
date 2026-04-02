@@ -60,6 +60,63 @@ class VariationResponse(BaseModel):
     message: str = ""
 
 
+class CommentRequest(BaseModel):
+    """Request body for generating post comment replies."""
+
+    post_content: str = Field(
+        ...,
+        min_length=5,
+        max_length=5000,
+        description="Contenido del post de Instagram al que se quiere responder",
+    )
+    num_comments: int = Field(
+        default=10,
+        ge=1,
+        le=50,
+        description="Numero de comentarios a generar (1-50)",
+    )
+    tone: Tone = Field(
+        default=Tone.FRIENDLY,
+        description="Tono del comentario",
+    )
+    context: Optional[str] = Field(
+        default=None,
+        max_length=1000,
+        description="Contexto del negocio (opcional, para posicionamiento sutil sin vender)",
+    )
+    rules: list[str] = Field(
+        default=[],
+        description="Reglas adicionales",
+    )
+
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {
+                    "post_content": "Hoy lanzamos nuestra nueva coleccion de verano. Meses de trabajo por fin dan frutos. Gracias a todo el equipo que hizo esto posible!",
+                    "num_comments": 5,
+                    "tone": "amigable",
+                    "context": "Agencia de marketing digital",
+                    "rules": ["No vender directamente"],
+                }
+            ]
+        }
+    }
+
+
+class CommentResponse(BaseModel):
+    """Response containing generated comments."""
+
+    status: GenerationStatus
+    comments: list[str]
+    total: int
+    from_cache: int = 0
+    from_generation: int = 0
+    provider: str = ""
+    generation_time_seconds: float
+    message: str = ""
+
+
 class HealthResponse(BaseModel):
     """Health check response."""
 
@@ -82,3 +139,4 @@ class ErrorResponse(BaseModel):
 
     detail: str
     error_code: str = ""
+

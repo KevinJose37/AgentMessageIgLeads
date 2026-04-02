@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 
-from ...config import Settings, get_settings
+from ...config import get_settings
 from ...middleware.auth import verify_api_key
 from ...models.schemas import (
     CacheClearResponse,
@@ -14,7 +14,7 @@ from ...services.variation_service import VariationService
 router = APIRouter(prefix="/api/v1", tags=["variations"])
 
 # ---------------------------------------------------------------------------
-# Service singleton (initialized in lifespan)
+# Service singleton (set from main.py lifespan)
 # ---------------------------------------------------------------------------
 _service: VariationService | None = None
 
@@ -25,16 +25,9 @@ def get_service() -> VariationService:
     return _service
 
 
-def init_service(settings: Settings):
+def set_service(service: VariationService):
     global _service
-    _service = VariationService(settings)
-
-
-async def shutdown_service():
-    global _service
-    if _service:
-        await _service.close()
-        _service = None
+    _service = service
 
 
 # ---------------------------------------------------------------------------
@@ -51,10 +44,10 @@ async def shutdown_service():
         500: {"model": ErrorResponse},
         504: {"model": ErrorResponse},
     },
-    summary="Generar variaciones de mensaje",
+    summary="Generar variaciones de mensaje DM",
     description=(
-        "Genera N variaciones únicas de un mensaje base usando IA (Groq/Ollama). "
-        "Soporta placeholders dinámicos como {nombre}, {detalle}, etc."
+        "Genera N variaciones unicas de un mensaje base usando IA. "
+        "Soporta placeholders dinamicos como {nombre}, {detalle}, etc."
     ),
 )
 async def generate_variations(
@@ -68,11 +61,7 @@ async def generate_variations(
     except TimeoutError:
         raise HTTPException(
             status_code=504,
-            detail=(
-                "La inferencia del modelo excedió el tiempo límite. "
-                "Intenta reducir num_variations o espera que el modelo esté "
-                "completamente cargado en memoria."
-            ),
+            detail="La generacion excedio el tiempo limite.",
         )
     except ConnectionError as e:
         raise HTTPException(
@@ -82,7 +71,7 @@ async def generate_variations(
     except Exception as e:
         raise HTTPException(
             status_code=500,
-            detail=f"Error de generación: {str(e)}",
+            detail=f"Error de generacion: {str(e)}",
         )
 
 
@@ -133,8 +122,8 @@ async def provider_info(
 @router.delete(
     "/cache",
     response_model=CacheClearResponse,
-    summary="Limpiar cache de variaciones",
-    description="Elimina todas las variaciones cacheadas.",
+    summary="Limpiar cache",
+    description="Elimina todas las variaciones y comentarios cacheados.",
 )
 async def clear_cache(
     _: str = Depends(verify_api_key),
@@ -144,12 +133,12 @@ async def clear_cache(
         return CacheClearResponse(
             cleared=False,
             entries_removed=0,
-            message="Cache está deshabilitado en la configuración.",
+            message="Cache deshabilitado en la configuracion.",
         )
 
     removed = service.cache.clear_cache()
     return CacheClearResponse(
         cleared=True,
         entries_removed=removed,
-        message=f"Se eliminaron {removed} variaciones del cache.",
+        message=f"Se eliminaron {removed} entradas del cache.",
     )

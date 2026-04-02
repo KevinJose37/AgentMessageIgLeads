@@ -2,17 +2,17 @@ import logging
 from typing import Optional
 
 from ..config import Settings
-from ..models.schemas import VariationRequest, VariationResponse
-from .base_ai_service import BaseAIService, build_provider_chain
+from ..models.schemas import CommentRequest, CommentResponse
+from .base_ai_service import BaseAIService
 from .cache_service import CacheService
-from .prompt_builder import PromptBuilder
+from .prompt_builder import CommentPromptBuilder
 from .providers.base import AIProvider
 
 logger = logging.getLogger(__name__)
 
 
-class VariationService(BaseAIService):
-    """Service for generating DM message variations."""
+class CommentService(BaseAIService):
+    """Service for generating natural Instagram post comments."""
 
     def __init__(
         self,
@@ -21,17 +21,17 @@ class VariationService(BaseAIService):
         settings: Settings,
     ):
         super().__init__(providers, cache, settings)
-        self.prompt_builder = PromptBuilder()
+        self.prompt_builder = CommentPromptBuilder()
 
-    async def generate_variations(
-        self, request: VariationRequest
-    ) -> VariationResponse:
-        """Generate N variations for the given message."""
+    async def generate_comments(
+        self, request: CommentRequest
+    ) -> CommentResponse:
+        """Generate N comment replies for the given post content."""
 
         def build_prompt(batch_size: int) -> tuple[str, str]:
-            return self.prompt_builder.build_variation_prompt(
-                message=request.message,
-                num_variations=batch_size,
+            return self.prompt_builder.build_comment_prompt(
+                post_content=request.post_content,
+                num_comments=batch_size,
                 tone=request.tone.value,
                 rules=request.rules,
                 context=request.context,
@@ -39,14 +39,14 @@ class VariationService(BaseAIService):
 
         result = await self._generate_with_providers(
             build_prompt_fn=build_prompt,
-            count=request.num_variations,
-            cache_key=request.message,
-            cache_tone=f"variation_{request.tone.value}",
+            count=request.num_comments,
+            cache_key=request.post_content,
+            cache_tone=f"comment_{request.tone.value}",
         )
 
-        return VariationResponse(
+        return CommentResponse(
             status=result["status"],
-            variations=result["items"],
+            comments=result["items"],
             total=result["total"],
             from_cache=result["from_cache"],
             from_generation=result["from_generation"],
@@ -57,6 +57,6 @@ class VariationService(BaseAIService):
                 result["from_cache"],
                 result["from_generation"],
                 result["error"],
-                item_name="variaciones",
+                item_name="comentarios",
             ),
         )
