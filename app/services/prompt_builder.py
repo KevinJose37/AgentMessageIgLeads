@@ -149,34 +149,20 @@ TIPOS DE COMENTARIO (mezcla estos estilos):
     @staticmethod
     def build_comment_prompt(
         post_content: str,
-        num_comments: int,
         tone: str,
         rules: list[str] | None = None,
-        context: str | None = None,
     ) -> tuple[str, str]:
         """
-        Build system + user prompts for comment generation.
+        Build system + user prompts for single comment generation.
 
         Args:
             post_content: The text content of the Instagram post.
-            num_comments: Number of comments to generate.
             tone: Desired tone.
             rules: Optional additional rules.
-            context: Optional business context for subtle positioning.
 
         Returns:
             Tuple of (system_prompt, user_prompt)
         """
-        # Business context (subtle, not promotional)
-        context_section = ""
-        if context:
-            context_section = (
-                f"\nTU CONTEXTO (esto define tu perspectiva al comentar, "
-                f"pero NUNCA lo menciones ni vendas):\n{context}\n"
-                f"Usa este contexto solo para que tu comentario suene "
-                f"informado, no para promocionar nada.\n"
-            )
-
         # Additional rules
         rules_text = ""
         if rules:
@@ -186,8 +172,9 @@ TIPOS DE COMENTARIO (mezcla estos estilos):
 
         tone_desc = CommentPromptBuilder.TONE_DESCRIPTIONS.get(tone, tone)
 
-        user_prompt = f"""Lee el siguiente post de Instagram y genera {num_comments} comentarios UNICOS y diferentes.
-{context_section}
+        user_prompt = f"""Lee el siguiente post de Instagram y genera 1 comentario natural y genuino.
+
+Elige UNO de estos estilos segun lo que encaje mejor con el post:
 {CommentPromptBuilder.COMMENT_ARCHETYPES}
 
 ADAPTACION AL CONTEXTO DEL POST:
@@ -199,26 +186,22 @@ ADAPTACION AL CONTEXTO DEL POST:
 - Si es humor -> sigue el tono o reacciona naturalmente
 
 REGLAS CRITICAS:
-- Longitud: 5 a 20 palabras por comentario (como comentarios reales de Instagram)
-- Cada comentario debe ser COMPLETAMENTE diferente en estructura y enfoque
+- Longitud: 5 a 20 palabras (como un comentario real de Instagram)
 - NO escribir como marketing o ventas
-- NO promocionar servicios directamente
+- NO promocionar nada
 - NO sonar corporativo ni tecnico
 - NO usar frases genericas: "gran post", "excelente contenido", "muy interesante", "buen post"
-- NO repetir estructuras entre comentarios
 - NO exagerar entusiasmo artificial
-- Puede usar 0 o 1 emoji (no siempre, no en todos)
-- Algunos pueden ser preguntas
-- Algunos pueden ser opiniones
-- Algunos pueden ser reacciones cortas y genuinas
+- Puede usar 0 o 1 emoji (opcional)
 - TONO: {tone_desc}
 {rules_text}
 
 POST DE INSTAGRAM:
 \"\"\"{post_content}\"\"\"
 
-RESPUESTA: JSON array de {num_comments} strings cortos. SOLO el array.
-["comentario1", "comentario2", ...]"""
+RESPUESTA: JSON array con exactamente 1 string. SOLO el array.
+["tu comentario aqui"]"""
 
         return CommentPromptBuilder.SYSTEM_PROMPT, user_prompt
+
 

@@ -1,6 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
 
-from ...config import Settings, get_settings
 from ...middleware.auth import verify_api_key
 from ...models.schemas import (
     CommentRequest,
@@ -12,7 +11,7 @@ from ...services.comment_service import CommentService
 router = APIRouter(prefix="/api/v1", tags=["comments"])
 
 # ---------------------------------------------------------------------------
-# Service singleton (initialized in lifespan)
+# Service singleton (set from main.py lifespan)
 # ---------------------------------------------------------------------------
 _service: CommentService | None = None
 
@@ -38,28 +37,27 @@ def set_service(service: CommentService):
     response_model=CommentResponse,
     responses={
         401: {"model": ErrorResponse},
-        403: {"model": ErrorResponse},
         500: {"model": ErrorResponse},
         504: {"model": ErrorResponse},
     },
-    summary="Generar comentarios para un post",
+    summary="Generar comentario para un post",
     description=(
-        "Lee el contenido de un post de Instagram y genera N comentarios "
-        "naturales y variados. NO vende directamente — genera engagement genuino."
+        "Lee el contenido de un post de Instagram y genera UN comentario "
+        "natural y genuino. NO vende — genera engagement real."
     ),
 )
-async def generate_comments(
+async def generate_comment(
     request: CommentRequest,
     _: str = Depends(verify_api_key),
     service: CommentService = Depends(get_service),
 ):
     try:
-        return await service.generate_comments(request)
+        return await service.generate_comment(request)
 
     except TimeoutError:
         raise HTTPException(
             status_code=504,
-            detail="La generacion de comentarios excedio el tiempo limite.",
+            detail="La generacion del comentario excedio el tiempo limite.",
         )
     except ConnectionError as e:
         raise HTTPException(
