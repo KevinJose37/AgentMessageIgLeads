@@ -25,15 +25,14 @@ class PromptBuilder:
         "entusiasta": "Positivo con energía, pero sin exagerar",
     }
 
-    # Message archetypes to force diversity
+    # Message archetypes to inspire diversity
     MESSAGE_ARCHETYPES = """
-TIPOS DE MENSAJE (mezcla estos estilos entre las variaciones):
-1. CURIOSIDAD — genera intriga sin vender ("Vi algo en tu perfil que me llamó la atención...")
-2. PREGUNTA DIRECTA — abre conversación ("¿Tú manejas el marketing de tu negocio o alguien más lo hace?")
-3. OBSERVACIÓN — comenta algo específico ("Tu contenido tiene buen engagement, ¿has probado escalar con ads?")
-4. CONVERSACIONAL — casual, como amigo ("Hey, una pregunta rápida...")
-5. SOFT PITCH — menciona valor sin vender ("Estoy ayudando a negocios como el tuyo con algo, si te interesa te cuento")
-6. INCOMPLETO/ABIERTO — deja con curiosidad, pero indicando el contexto ("Vi tu perfil y se me ocurrió algo relacionado al {contexto}, ¿tienes un minuto?")\
+ESTILOS SUGERIDOS PARA DAR VARIEDAD (puedes usarlos sutilmente, pero sin perder el mensaje original):
+- Curiosidad (genera intriga sutil)
+- Pregunta directa (abre conversación)
+- Observación corta
+- Conversacional casual
+- Indirecto o incompleto (deja con ganas de responder)\
 """
 
     @staticmethod
@@ -77,33 +76,26 @@ TIPOS DE MENSAJE (mezcla estos estilos entre las variaciones):
 
         tone_desc = PromptBuilder.TONE_DESCRIPTIONS.get(tone, tone)
 
-        user_prompt = f"""Reescribe el siguiente mensaje de Instagram DM en {num_variations} versiones COMPLETAMENTE diferentes.
+        user_prompt = f"""Genera {num_variations} variaciones del siguiente mensaje de Instagram DM.
 
-CONTEXTO: Esto es un DM de Instagram, NO un email. Los mensajes deben ser CORTOS y directos.
+CONTEXTO: Esto es un DM de Instagram, NO un email. Los mensajes deben ser CORTOS, directos y naturales.
 {context_section}
 {PromptBuilder.MESSAGE_ARCHETYPES}
 
-REGLAS DE REESCRITURA:
-- Longitud: entre 8 y 25 palabras por mensaje (MÁXIMO 2 líneas)
-- NO todas las versiones deben ser ventas directas
-- Algunas deben ser SOLO preguntas
-- Algunas deben ser curiosas o abiertas (dejar con intriga)
-- Algunas pueden OMITIR saludo e ir directo al punto
-- Algunas pueden empezar con una pregunta o idea
-- Varía COMPLETAMENTE la estructura entre versiones
-- PROHIBIDO repetir el patrón: saludo + observación + pitch + CTA
-- Usa lenguaje natural, incluso ligeramente imperfecto (como humano real escribiendo rápido)
-- EVITA tono corporativo, de agencia o de email marketing
-- EVITA frases genéricas como "increíble oportunidad", "no te lo pierdas", "me encantaría conectar"
-- Máximo 1 emoji en ALGUNAS versiones (no en todas)
-- Algunos mensajes pueden ser incompletos o terminar con "..."
-{placeholder_rule}- TONO: {tone_desc}
+REGLAS DE ESCRITURA:
+- IMPORTANTE: Las REGLAS DEL USUARIO (si existen) tienen PRECEDENCIA ABSOLUTA sobre todo lo demás. ¡Cúmplelas al pie de la letra!
+- Debes mantener el MENSAJE BASE como el núcleo principal, NO inventes temas que el original no menciona y NO pierdas su significado.
+- Varía el fraseo para que no sean idénticas, pero respetando la intención exacta del mensaje base.
+- Usa lenguaje conversacional (informal, como escribiendo rápido en el celular).
+- EVITA tono de vendedor corporativo, lenguaje de "entrenador de negocios" o email marketing.
+- Máximo 1 emoji en ALGUNAS versiones (no en todas).
+{placeholder_rule}- TONO SUGERIDO: {tone_desc}
 {rules_text}
 
-MENSAJE BASE (extrae la intención, NO copies la estructura):
+MENSAJE BASE (mantén su enfoque, contexto e intención principal):
 "{message}"
 
-RESPUESTA: JSON array de {num_variations} strings cortos. SOLO el array.
+RESPUESTA: JSON array de {num_variations} strings cortos. SOLO el array, sin explicaciones.
 ["msg1", "msg2", ...]"""
 
         return PromptBuilder.SYSTEM_PROMPT, user_prompt
